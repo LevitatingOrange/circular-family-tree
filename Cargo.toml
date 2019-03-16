@@ -1,0 +1,11 @@
+[package]
+name = "circular-family-tree"
+version = "0.1.0"
+authors = ["Lennart Vogelsang <dev@vogelsangs.net>"]
+edition = "2018"
+
+[dependencies]
+svg = "0.5"
+docopt = "1"
+serde = "1.0" # if you're using `derive(Deserialize)`
+serde_derive = "1.0" # if you're using `derive(Deserialize)`
