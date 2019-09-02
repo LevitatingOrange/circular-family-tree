@@ -1,10 +1,11 @@
 mod circular_binary_tree;
 mod position;
 
-use circular_binary_tree::CircularBinaryTree;
 use svg::Document;
 
+use circular_binary_tree::*;
 use docopt::Docopt;
+use position::Position;
 use serde_derive::Deserialize;
 
 const USAGE: &'static str = "
@@ -43,25 +44,78 @@ struct Args {
     flag_font_family: String,
 }
 
+fn create_content(num_segments: u32) -> Vec<String> {
+    let mut content = Vec::with_capacity(((1 - 2isize.pow(num_segments + 1)) / -1 - 1) as usize);
+    for depth in 1..num_segments + 1 {
+        let max = 2u64.pow(depth);
+        for i in 0..max {
+            content.push(format!("{}", 2u64.pow(depth) + (i as u64) - 1));
+        }
+    }
+    content
+}
+
 fn main() {
-    let args: Args = Docopt::new(USAGE)
-        .and_then(|d| d.deserialize())
-        .unwrap_or_else(|e| e.exit());
-    let tree = CircularBinaryTree::new(
-        args.arg_RADIUS * 2.0,
-        args.arg_RADIUS,
-        args.flag_margin,
-        args.arg_DEPTH,
-        args.flag_inner_sector,
-        args.flag_x_offset,
-        args.flag_y_offset,
-        !args.flag_disable_numbers,
-        args.flag_line_width,
-        args.flag_font_size,
-        args.flag_font_family,
+    // let args: Args = Docopt::new(USAGE)
+    //     .and_then(|d| d.deserialize())
+    //     .unwrap_or_else(|e| e.exit());
+    // let tree = CircularBinaryTree::new(
+    //     args.arg_RADIUS * 2.0,
+    //     args.arg_RADIUS,
+    //     args.flag_margin,
+    //     args.arg_DEPTH,
+    //     args.flag_inner_sector,
+    //     args.flag_x_offset,
+    //     args.flag_y_offset,
+    //     !args.flag_disable_numbers,
+    //     args.flag_line_width,
+    //     args.flag_font_size,
+    //     args.flag_font_family,
+    // );
+
+    let height = 7000.0;
+    let width = height * (2.0 as f64).sqrt();
+    let radius = width/2.0;
+
+    // let height = 2000.0;
+    // let width = 2000.0;
+    // let radius = 1000.0;
+    let center = Position::new(width/2.0,0.0, height);
+    let start_angle = 0.0;
+    let end_angle = 180.0;
+
+    //let left = true;
+
+    // let (center, start_angle, end_angle) = if left {
+    //     (Position::new(width, 0.0, height), 90.0, 180.0)
+    // } else {
+    //     (Position::new(0.0, 0.0, height), 0.0, 90.0)
+    // };
+
+    let num_segments = 9;
+    let line_width = 1.0;
+
+    let s = CircularBinaryTree::new(
+        center,
+        radius / (num_segments as f64),
+        1.0,
+        num_segments,
+        line_width,
+        start_angle,
+        end_angle,
+        -10.0,
+        80.0,
+        0.125,
+        "Times New Roman".to_owned(),
+        60.0,
+        0.1,
     );
+    let content = create_content(num_segments);
+    //println!("{:?}", content);
+
     let document = Document::new()
-        .set("viewBox", (0, 0, args.arg_RADIUS * 2.0, args.arg_RADIUS))
-        .add(tree.draw());
-    svg::save(args.arg_FILE, &document).unwrap();
+        .set("viewBox", (0, 0, width, height))
+        .add(s.draw(&content));
+    //svg::save(args.arg_FILE, &document).unwrap();
+    svg::save("baum.svg", &document).unwrap();
 }

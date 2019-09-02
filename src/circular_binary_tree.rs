@@ -13,207 +13,227 @@ pub struct CircularBinaryTree {
     segment_width: f64,
     segment_width_multipier: f64,
     num_segments: u32,
-    inner_segment_width: f64,
-    number_x_offset: f64,
-    number_y_offset: f64,
-    draw_numbers: bool,
     line_width: f64,
-    font_size: u64,
+    start_angle: f64,
+    end_angle: f64,
+    text_x_offset: f64,
+    initial_text_y_offset: f64,
+    text_y_modifier: f64,
     font_family: String,
+    initial_font_size: f64,
+    font_size_modifier: f64,
 }
 
 impl CircularBinaryTree {
     pub fn new(
-        width: f64,
-        height: f64,
-        margin: f64,
+        center: Position,
+        segment_width: f64,
+        segment_width_multipier: f64,
         num_segments: u32,
-        inner_segment_width_percentage: f64,
-        number_x_offset: f64,
-        number_y_offset: f64,
-        draw_numbers: bool,
         line_width: f64,
-        font_size: u64,
+        start_angle: f64,
+        end_angle: f64,
+        text_x_offset: f64,
+        initial_text_y_offset: f64,
+        text_y_modifier: f64,
         font_family: String,
+        initial_font_size: f64,
+        font_size_modifier: f64,
     ) -> Self {
-        let segment_width = ((width / 2.0) - margin) / ((num_segments) as f64);
         CircularBinaryTree {
-            center: Position::new(width / 2.0, 0.0, height),
+            center,
             segment_width,
-            segment_width_multipier: 1.0,
+            segment_width_multipier,
             num_segments,
-            inner_segment_width: segment_width * inner_segment_width_percentage,
-            number_x_offset,
-            number_y_offset,
-            draw_numbers,
             line_width,
-            font_size,
+            start_angle: start_angle.to_radians(),
+            end_angle: end_angle.to_radians(),
+            text_x_offset,
+            initial_text_y_offset,
+            text_y_modifier,
             font_family,
+            initial_font_size,
+            font_size_modifier,
         }
     }
-    pub fn draw(&self) -> Group {
-        let segments = draw_segment_lines(
-            self.center,
-            self.segment_width,
-            self.segment_width_multipier,
-            self.num_segments,
-        );
-        let sectors = draw_sectors(
-            self.center,
-            self.segment_width,
-            self.segment_width_multipier,
-            self.inner_segment_width,
-            self.num_segments,
-        );
-        let numbers = draw_numbers(
-            self.center,
-            self.segment_width,
-            self.segment_width_multipier,
-            self.number_x_offset,
-            self.number_y_offset,
-            self.num_segments,
-        );
-
-        let mut g = Group::new()
+    pub fn draw(&self, content: &[String]) -> Group {
+        let g = Group::new()
             .set("font-family", self.font_family.as_ref())
-            .set("font-size", self.font_size)
             .set("fill", "none")
             .set("stroke", "black")
             .set("style", "white-space: pre;")
             .set("stroke-width", self.line_width);
-        g = g.add(segments).add(sectors);
-        if self.draw_numbers {
-            g = g.add(numbers)
+        g.add(self.draw_segments())
+            .add(self.draw_sectors())
+            .add(self.draw_content(content))
+    }
+
+    fn draw_segments(&self) -> Path {
+        let path_data = self.draw_segments_inner(self.start_angle, self.end_angle, 0, Data::new());
+        Path::new().set("d", path_data)
+    }
+    fn draw_segments_inner(
+        &self,
+        start_angle: f64,
+        end_angle: f64,
+        depth: u32,
+        path_data: Data,
+    ) -> Data {
+        if depth >= self.num_segments {
+            return path_data;
+        }
+        let distance_from_center = depth as f64 * self.segment_width * self.segment_width_multipier;
+        let length =
+            (self.num_segments - depth) as f64 * self.segment_width * self.segment_width_multipier;
+
+        let angle = start_angle + (end_angle - start_angle) / 2.0;
+
+        let from_pos = self.center
+            + Position::new(
+                distance_from_center * angle.cos(),
+                distance_from_center * angle.sin(),
+                self.center.height,
+            );
+        let to_pos = from_pos
+            + Position::new(
+                length * angle.cos(),
+                length * angle.sin(),
+                self.center.height,
+            );
+
+        let mut new_data = path_data.move_to(from_pos).line_to(to_pos);
+
+        new_data = self.draw_segments_inner(start_angle, angle, depth + 1, new_data);
+        new_data = self.draw_segments_inner(angle, end_angle, depth + 1, new_data);
+        new_data
+    }
+
+    fn draw_sectors(&self) -> Path {
+        let long_way = if (self.end_angle - self.start_angle).abs() > PI * 3.0 / 4.0 {
+            1
+        } else {
+            0
+        };
+
+        let mut path_data = Data::new();
+        for depth in 0..=self.num_segments {
+            let distance_from_center =
+                depth as f64 * self.segment_width * self.segment_width_multipier;
+            let from_pos = self.center
+                + Position::new(
+                    distance_from_center * self.start_angle.cos(),
+                    distance_from_center * self.start_angle.sin(),
+                    self.center.height,
+                );
+            let to_pos = self.center
+                + Position::new(
+                    distance_from_center * self.end_angle.cos(),
+                    distance_from_center * self.end_angle.sin(),
+                    self.center.height,
+                );
+
+            path_data = path_data.move_to(from_pos).elliptical_arc_to((
+                distance_from_center,
+                distance_from_center,
+                0,
+                long_way,
+                0,
+                to_pos,
+            ))
+        }
+        Path::new().set("d", path_data)
+    }
+
+    fn draw_content(&self, content: &[String]) -> Group {
+        let mut g = Group::new().set("fill", "black").set("stroke", "none");
+
+        assert_eq!(content.len() as isize, (1 - 2isize.pow(self.num_segments + 1)) / -1 - 1 , "content does not have right size");
+
+        for depth in 1..self.num_segments + 1 {
+            let max = 2u64.pow(depth);
+            for i in 0..max {
+                let angle = self.start_angle
+                    + i as f64 * ((self.end_angle - self.start_angle).abs() / (max as f64));
+                let distance_from_center =
+                    depth as f64 * self.segment_width * self.segment_width_multipier
+                        + self.text_x_offset;
+
+                let rot_str = format!(
+                    "rotate({},{},{})",
+                    360.0 - angle.to_degrees(),
+                    self.center.x(),
+                    self.center.y()
+                );
+
+                g = g.add(
+                    TextNode::new()
+                        .set("text-anchor", "end")
+                        //.set("dominant-baseline", "text-top")
+                        .set("x", self.center.x() + distance_from_center)
+                        .set(
+                            "y",
+                            self.center.y()
+                                - (self.initial_text_y_offset
+                                    - (self.text_y_modifier * max as f64)),
+                        )
+                        .set("transform", rot_str)
+                        .set(
+                            "font-size",
+                            self.initial_font_size - (self.font_size_modifier * max as f64),
+                        )
+                        .add(Text::new(&content[2usize.pow(depth) + (i as usize) - 2])),
+                    //.add(Text::new(format!("{:width$}", 0, width = width))),
+                )
+            }
         }
         g
     }
-}
 
-fn draw_sectors(
-    center: Position,
-    segment_width: f64,
-    segment_width_multipier: f64,
-    inner_segment_width: f64,
-    num_segments: u32,
-) -> impl Node {
-    let mut g = Group::new();
-    let mut length = segment_width;
-    for _ in 0..num_segments {
-        let outer = Circle::new()
-            .set("cx", center.x())
-            .set("cy", center.y())
-            .set("r", length);
-        let inner = Circle::new()
-            .set("cx", center.x())
-            .set("cy", center.y())
-            .set("r", length - inner_segment_width);
-        g = g.add(outer).add(inner);
-        length += segment_width * segment_width_multipier;
-    }
-    g
-}
-fn draw_numbers(
-    center: Position,
-    segment_width: f64,
-    segment_width_multipier: f64,
-    x_offset: f64,
-    y_offset: f64,
-    num_segments: u32,
-) -> impl Node {
-    let mut g = Group::new();
-    let mut length = segment_width;
-    let width = (num_segments as f64 * 2f64.ln() / (2f64.ln() + 5f64.ln())).ceil() as usize;
-    for x in 0..num_segments {
-        let curr_pos = center + Position::new(-length + x_offset, y_offset, center.height);
-        let max = 2u64.pow(x + 1);
-        let angle_modifier = PI / (max as f64);
-        let mut angle = angle_modifier;
-        for y in 0..max {
-            let num = 2u64.pow(x + 1) + y - 1;
-            let rot_str_left = format!(
-                "rotate({},{},{})",
-                angle * 180.0 / PI,
-                center.x(),
-                center.y()
-            );
-            g = g.add(
-                TextNode::new()
-                    .set("x", curr_pos.x())
-                    .set("y", curr_pos.y())
-                    .set("transform", rot_str_left)
-                    .add(Text::new(format!("{:width$}", num, width = width))),
-            );
-            angle += angle_modifier;
-        }
-        //g = g.add(outer).add(inner);
-        length += segment_width * segment_width_multipier;
-    }
-    g.set("fill", "black").set("stroke", "none")
-}
+    // fn draw_numbers_inner(
+    //     &self,
+    //     start_angle: f64,
+    //     end_angle: f64,
+    //     depth: u32,
+    //     group: Group,
+    // ) -> Group {
+    //     if depth >= self.num_segments + 1 {
+    //         return group;
+    //     }
 
-fn draw_segment_lines(
-    center: Position,
-    segment_width: f64,
-    segment_width_multipier: f64,
-    num_segments: u32,
-) -> impl Node {
-    let data = draw_segment_lines_inner(
-        Data::new(),
-        center,
-        PI / 2.0,
-        0,
-        segment_width,
-        segment_width_multipier,
-        num_segments,
-    )
-    .close();
-    let path = Path::new().set("d", data);
-    path
-}
+    //     let distance_from_center = depth as f64 * self.segment_width * self.segment_width_multipier;
 
-fn draw_segment_lines_inner(
-    segment_lines: Data,
-    pos: Position,
-    angle: f64,
-    depth: u32,
-    segment_width: f64,
-    segment_width_multipier: f64,
-    num_segments: u32,
-) -> Data {
-    if depth == num_segments {
-        return segment_lines;
-    }
-    let distance_from_center = depth as f64 * segment_width * segment_width_multipier;
-    let length = (num_segments - depth) as f64 * segment_width * segment_width_multipier;
-    let angle_modifier = PI / (2 as f64).powf((depth + 2) as f64);
+    //     let angle = start_angle
+    //         + (end_angle - start_angle) / 2.0;
+    //     let curr_pos = self.center
+    //         + Position::new(
+    //             (distance_from_center + self.text_x_offset) * start_angle.cos(),
+    //             (distance_from_center + self.text_x_offset) * start_angle.sin() + self.text_y_offset,
+    //             self.center.height,
+    //         );
+    //     let rot_str = format!(
+    //         "rotate({},{},{})",
+    //         angle.to_degrees(),
+    //         self.center.x(),
+    //         self.center.y()
+    //     );
 
-    let from_pos = pos
-        + Position::new(
-            distance_from_center * angle.cos(),
-            distance_from_center * angle.sin(),
-            pos.height,
-        );
-    let to_pos = from_pos + Position::new(length * angle.cos(), length * angle.sin(), pos.height);
+    //     let mut new_group = group.add(
+    //         TextNode::new()
+    //             .set("text-anchor", "end")
+    //             //.set("dominant-baseline", "text-top")
+    //             .set("x", curr_pos.x())
+    //             .set("y", curr_pos.y())
+    //             .set("transform", rot_str)
+    //             .set(
+    //                 "font-size",
+    //                 self.initial_font_size - (self.font_size_modifier * depth as f64),
+    //             )
+    //             .add(Text::new("Hi")),
+    //         //.add(Text::new(format!("{:width$}", 0, width = width))),
+    //     );
 
-    let mut new_data = segment_lines.move_to(from_pos).line_to(to_pos);
-
-    new_data = draw_segment_lines_inner(
-        new_data,
-        pos,
-        angle - angle_modifier,
-        depth + 1,
-        segment_width * segment_width_multipier,
-        segment_width_multipier,
-        num_segments,
-    );
-    new_data = draw_segment_lines_inner(
-        new_data,
-        pos,
-        angle + angle_modifier,
-        depth + 1,
-        segment_width * segment_width_multipier,
-        segment_width_multipier,
-        num_segments,
-    );
-    new_data
+    //     new_group = self.draw_numbers_inner(start_angle, angle, depth + 1, new_group);
+    //     new_group = self.draw_numbers_inner(angle, end_angle, depth + 1, new_group);
+    //     new_group
+    // }
 }
