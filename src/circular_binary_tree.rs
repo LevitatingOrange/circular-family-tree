@@ -1,11 +1,9 @@
 use crate::position::*;
 use std::f64::consts::PI;
 use svg::node::element::path::Data;
-use svg::node::element::Circle;
 use svg::node::element::Group;
 use svg::node::element::Path;
 use svg::node::element::Text as TextNode;
-use svg::node::Node;
 use svg::node::Text;
 
 pub struct CircularBinaryTree {
@@ -82,9 +80,11 @@ impl CircularBinaryTree {
         if depth >= self.num_segments {
             return path_data;
         }
-        let distance_from_center = depth as f64 * self.segment_width * self.segment_width_multipier;
-        let length =
-            (self.num_segments - depth) as f64 * self.segment_width * self.segment_width_multipier;
+        let distance_from_center =
+            f64::from(depth) * self.segment_width * self.segment_width_multipier;
+        let length = f64::from(self.num_segments - depth)
+            * self.segment_width
+            * self.segment_width_multipier;
 
         let angle = start_angle + (end_angle - start_angle) / 2.0;
 
@@ -118,7 +118,7 @@ impl CircularBinaryTree {
         let mut path_data = Data::new();
         for depth in 0..=self.num_segments {
             let distance_from_center =
-                depth as f64 * self.segment_width * self.segment_width_multipier;
+                f64::from(depth) * self.segment_width * self.segment_width_multipier;
             let from_pos = self.center
                 + Position::new(
                     distance_from_center * self.start_angle.cos(),
@@ -147,16 +147,36 @@ impl CircularBinaryTree {
     fn draw_content(&self, content: &[String]) -> Group {
         let mut g = Group::new().set("fill", "black").set("stroke", "none");
 
-        assert_eq!(content.len() as isize, (1 - 2isize.pow(self.num_segments + 1)) / -1 - 1 , "content does not have right size");
+        assert_eq!(
+            content.len() as isize,
+            (1 - 2isize.pow(self.num_segments + 1)) / -1 - 1,
+            "content does not have right size"
+        );
 
-        for depth in 1..self.num_segments + 1 {
+        for depth in 1..=self.num_segments {
             let max = 2u64.pow(depth);
             for i in 0..max {
                 let angle = self.start_angle
                     + i as f64 * ((self.end_angle - self.start_angle).abs() / (max as f64));
-                let distance_from_center =
-                    depth as f64 * self.segment_width * self.segment_width_multipier
-                        + self.text_x_offset;
+
+                let (angle, distance_from_center, anchor) = if angle.to_degrees() < 90.0 {
+                    (
+                        angle,
+                        f64::from(depth) * self.segment_width * self.segment_width_multipier
+                            + self.text_x_offset,
+                        "end",
+                    )
+                } else {
+                    (
+                        self.end_angle
+                            + (i + 1) as f64
+                                * ((self.end_angle - self.start_angle).abs() / (max as f64)),
+                        (f64::from(depth) * self.segment_width * self.segment_width_multipier)
+                            * -1.0
+                            - self.text_x_offset,
+                        "start",
+                    )
+                };
 
                 let rot_str = format!(
                     "rotate({},{},{})",
@@ -167,7 +187,7 @@ impl CircularBinaryTree {
 
                 g = g.add(
                     TextNode::new()
-                        .set("text-anchor", "end")
+                        .set("text-anchor", anchor)
                         //.set("dominant-baseline", "text-top")
                         .set("x", self.center.x() + distance_from_center)
                         .set(
@@ -188,52 +208,4 @@ impl CircularBinaryTree {
         }
         g
     }
-
-    // fn draw_numbers_inner(
-    //     &self,
-    //     start_angle: f64,
-    //     end_angle: f64,
-    //     depth: u32,
-    //     group: Group,
-    // ) -> Group {
-    //     if depth >= self.num_segments + 1 {
-    //         return group;
-    //     }
-
-    //     let distance_from_center = depth as f64 * self.segment_width * self.segment_width_multipier;
-
-    //     let angle = start_angle
-    //         + (end_angle - start_angle) / 2.0;
-    //     let curr_pos = self.center
-    //         + Position::new(
-    //             (distance_from_center + self.text_x_offset) * start_angle.cos(),
-    //             (distance_from_center + self.text_x_offset) * start_angle.sin() + self.text_y_offset,
-    //             self.center.height,
-    //         );
-    //     let rot_str = format!(
-    //         "rotate({},{},{})",
-    //         angle.to_degrees(),
-    //         self.center.x(),
-    //         self.center.y()
-    //     );
-
-    //     let mut new_group = group.add(
-    //         TextNode::new()
-    //             .set("text-anchor", "end")
-    //             //.set("dominant-baseline", "text-top")
-    //             .set("x", curr_pos.x())
-    //             .set("y", curr_pos.y())
-    //             .set("transform", rot_str)
-    //             .set(
-    //                 "font-size",
-    //                 self.initial_font_size - (self.font_size_modifier * depth as f64),
-    //             )
-    //             .add(Text::new("Hi")),
-    //         //.add(Text::new(format!("{:width$}", 0, width = width))),
-    //     );
-
-    //     new_group = self.draw_numbers_inner(start_angle, angle, depth + 1, new_group);
-    //     new_group = self.draw_numbers_inner(angle, end_angle, depth + 1, new_group);
-    //     new_group
-    // }
 }

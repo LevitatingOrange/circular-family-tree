@@ -4,49 +4,110 @@ mod position;
 use svg::Document;
 
 use circular_binary_tree::*;
-use docopt::Docopt;
 use position::Position;
-use serde_derive::Deserialize;
+use resvg::prelude::*;
+use std::path::PathBuf;
+use std::str::FromStr;
+use structopt::StructOpt;
 
-const USAGE: &'static str = "
-Program to generate a circular binary tree (e.g. for family trees) as an svg.
+#[derive(Debug)]
+enum DIN {
+    A0_4,
+    A0_2,
+    A0,
+    A1,
+    A2,
+    A3,
+    A4,
+    A5,
+    A6,
+    A7,
+    A8,
+    A9,
+    A10,
+}
 
-Usage:
-  circular-family-tree FILE RADIUS DEPTH [--inner-sector=<ir>, --margin=<m>, --x-offset=<xo>, --y-offset=<yo>, --disable-numbers, --line-width=<lw>, --font-size=<fs>, --font-family=<ff>]
-  circular-family-tree (-h | --help)
-  circular-family-tree --version
+impl DIN {
+    fn size(&self) -> (u64, u64) {
+        match self {
+            Self::A0_4 => (1682, 2378),
+            Self::A0_2 => (1189, 1682),
+            Self::A0 => (841, 1189),
+            Self::A1 => (594, 841),
+            Self::A2 => (420, 594),
+            Self::A3 => (297, 420),
+            Self::A4 => (210, 297),
+            Self::A5 => (148, 210),
+            Self::A6 => (105, 148),
+            Self::A7 => (74, 105),
+            Self::A8 => (52, 74),
+            Self::A9 => (37, 52),
+            Self::A10 => (26, 37),
+        }
+    }
+}
 
-Options:
-  -h --help               Show this screen.
-  --version               Show version.
-  --inner-sector=<ir>     Draw an inner ring for each sector at a percentage of the sector width [default: 0.0].
-  --margin=<m>           Margin between tree and edge [default: 0.0].
-  --x-offset=<xo>         x-offset of the numbers [default: 0.0].
-  --y-offset=<yo>         y-offset of the numbers [default: 1.0].
-  --disable-numbers=<dn>  Disable printing of numbers.  
-  --line-width=<lw>       Line width [default: 1.0].  
-  --font-size=<fs>        Font size [default: 10].  
-  --font-family=<ff>      Font family [default: Arial].  
-";
+impl FromStr for DIN {
+    type Err = String;
 
-#[derive(Debug, Deserialize)]
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            s if s.to_uppercase() == "4A0" => Ok(Self::A0_4),
+            s if s.to_uppercase() == "2A0" => Ok(Self::A0_2),
+            s if s.to_uppercase() == "A0" => Ok(Self::A0),
+            s if s.to_uppercase() == "A1" => Ok(Self::A1),
+            s if s.to_uppercase() == "A2" => Ok(Self::A2),
+            s if s.to_uppercase() == "A3" => Ok(Self::A3),
+            s if s.to_uppercase() == "A4" => Ok(Self::A4),
+            s if s.to_uppercase() == "A5" => Ok(Self::A5),
+            s if s.to_uppercase() == "A6" => Ok(Self::A6),
+            s if s.to_uppercase() == "A7" => Ok(Self::A7),
+            s if s.to_uppercase() == "A8" => Ok(Self::A8),
+            s if s.to_uppercase() == "A9" => Ok(Self::A9),
+            s if s.to_uppercase() == "A10" => Ok(Self::A10),
+            s => Err(format!("{} is not a valid DIN paper size", s)),
+        }
+    }
+}
+
+#[derive(Debug, StructOpt)]
+#[structopt(
+    name = "circular-binary-tree",
+    about = "A tool to generate a circular binary tree as an svg."
+)]
 struct Args {
-    arg_FILE: String,
-    arg_RADIUS: f64,
-    arg_DEPTH: u32,
-    flag_margin: f64,
-    flag_inner_sector: f64,
-    flag_x_offset: f64,
-    flag_y_offset: f64,
-    flag_disable_numbers: bool,
-    flag_line_width: f64,
-    flag_font_size: u64,
-    flag_font_family: String,
+    #[structopt(name = "FILE", parse(from_os_str))]
+    output: PathBuf,
+    #[structopt(name = "NUM_SEGMENTS")]
+    num_segments: u32,
+    /// not needed when using -d/--din
+    #[structopt(name = "WIDTH", required_unless("din"))]
+    width: Option<f64>,
+    /// not needed when using -d/--din
+    #[structopt(name = "HEIGHT", required_unless("din"))]
+    height: Option<f64>,
+    /// Use DIN (A[0-10]) format
+    #[structopt(short, long)]
+    din: Option<DIN>,
+    #[structopt(short, long, default_value = "1.0")]
+    line_width: f64,
+    #[structopt(short, long, default_value = "0.0")]
+    x_offset: f64,
+    #[structopt(short, long, default_value = "0.0")]
+    y_offset: f64,
+    #[structopt(short = "m", long, default_value = "0.0")]
+    y_offset_modifier: f64,
+    #[structopt(short = "s", long, default_value = "16.0")]
+    font_size: f64,
+    #[structopt(short = "n", long, default_value = "0.0")]
+    font_size_modifier: f64,
+    #[structopt(short, long, default_value = "Times New Roman")]
+    font_family: String,
 }
 
 fn create_content(num_segments: u32) -> Vec<String> {
     let mut content = Vec::with_capacity(((1 - 2isize.pow(num_segments + 1)) / -1 - 1) as usize);
-    for depth in 1..num_segments + 1 {
+    for depth in 1..=num_segments {
         let max = 2u64.pow(depth);
         for i in 0..max {
             content.push(format!("{}", 2u64.pow(depth) + (i as u64) - 1));
@@ -56,66 +117,52 @@ fn create_content(num_segments: u32) -> Vec<String> {
 }
 
 fn main() {
-    // let args: Args = Docopt::new(USAGE)
-    //     .and_then(|d| d.deserialize())
-    //     .unwrap_or_else(|e| e.exit());
-    // let tree = CircularBinaryTree::new(
-    //     args.arg_RADIUS * 2.0,
-    //     args.arg_RADIUS,
-    //     args.flag_margin,
-    //     args.arg_DEPTH,
-    //     args.flag_inner_sector,
-    //     args.flag_x_offset,
-    //     args.flag_y_offset,
-    //     !args.flag_disable_numbers,
-    //     args.flag_line_width,
-    //     args.flag_font_size,
-    //     args.flag_font_family,
-    // );
+    env_logger::init();
+    let args = Args::from_args();
 
-    let height = 7000.0;
-    let width = height * (2.0 as f64).sqrt();
-    let radius = width/2.0;
+    let (width, height) = if let Some(d) = args.din {
+        (d.size().1 as f64, d.size().0 as f64)
+    } else {
+        (args.width.unwrap(), args.height.unwrap())
+    };
 
-    // let height = 2000.0;
-    // let width = 2000.0;
-    // let radius = 1000.0;
-    let center = Position::new(width/2.0,0.0, height);
+    let radius = width / 2.0;
+    let center = Position::new(width / 2.0, 0.0, height);
     let start_angle = 0.0;
     let end_angle = 180.0;
 
-    //let left = true;
-
-    // let (center, start_angle, end_angle) = if left {
-    //     (Position::new(width, 0.0, height), 90.0, 180.0)
-    // } else {
-    //     (Position::new(0.0, 0.0, height), 0.0, 90.0)
-    // };
-
-    let num_segments = 9;
-    let line_width = 1.0;
-
     let s = CircularBinaryTree::new(
         center,
-        radius / (num_segments as f64),
+        radius / f64::from(args.num_segments),
         1.0,
-        num_segments,
-        line_width,
+        args.num_segments,
+        args.line_width,
         start_angle,
         end_angle,
-        -10.0,
-        80.0,
-        0.125,
-        "Times New Roman".to_owned(),
-        60.0,
-        0.1,
+        args.x_offset * -1.0,   //-10.0,
+        args.y_offset,          // 80.0,
+        args.y_offset_modifier, //0.125,
+        args.font_family,
+        args.font_size,          //Times New Roman
+        args.font_size_modifier, //0.1
     );
-    let content = create_content(num_segments);
-    //println!("{:?}", content);
+    let content = create_content(args.num_segments);
 
     let document = Document::new()
         .set("viewBox", (0, 0, width, height))
+        .set("width", format!("{}mm", width))
+        .set("height", format!("{}mm", height))
         .add(s.draw(&content));
-    //svg::save(args.arg_FILE, &document).unwrap();
-    svg::save("baum.svg", &document).unwrap();
+
+    svg::save(args.output.clone(), &document).unwrap();
+
+    // let mut opt = resvg::Options::default();
+    // opt.usvg.path = Some(args.output.clone().into());
+    // let rtree = usvg::Tree::from_file(args.output.clone(), &opt.usvg).unwrap();
+
+    // let backend = resvg::default_backend();
+    // let mut img = backend.render_to_image(&rtree, &opt).unwrap();
+    // let mut png_out = args.output.clone();
+    // png_out.set_extension("png");
+    // img.save_png(&png_out);
 }

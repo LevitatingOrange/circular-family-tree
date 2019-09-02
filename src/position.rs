@@ -16,10 +16,10 @@ impl Position {
     }
 
     pub fn x(self) -> f64 {
-        return self.x;
+        self.x
     }
     pub fn y(self) -> f64 {
-        return self.height - self.y;
+        self.height - self.y
     }
 }
 
@@ -27,7 +27,7 @@ impl Add<Self> for Position {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        assert_eq!(self.height, rhs.height);
+        assert!((self.height - rhs.height).abs() <= std::f64::EPSILON);
         Self::new(self.x + rhs.x, self.y + rhs.y, self.height)
     }
 }
