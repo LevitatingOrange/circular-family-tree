@@ -103,6 +103,8 @@ struct Args {
     font_size_modifier: f64,
     #[structopt(short, long, default_value = "Times New Roman")]
     font_family: String,
+    #[structopt(short="p", long, default_value = "0.0")]
+    margin: f64,
 }
 
 fn create_content(num_segments: u32) -> Vec<String> {
@@ -126,8 +128,8 @@ fn main() {
         (args.width.unwrap(), args.height.unwrap())
     };
 
-    let radius = width / 2.0;
-    let center = Position::new(width / 2.0, 0.0, height);
+    let radius = width / 2.0 - args.margin;
+    let center = Position::new(width / 2.0, args.margin, height);
     let start_angle = 0.0;
     let end_angle = 180.0;
 

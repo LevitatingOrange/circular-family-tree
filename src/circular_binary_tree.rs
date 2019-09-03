@@ -77,11 +77,12 @@ impl CircularBinaryTree {
         depth: u32,
         path_data: Data,
     ) -> Data {
-        if depth >= self.num_segments {
-            return path_data;
-        }
         let distance_from_center =
             f64::from(depth) * self.segment_width * self.segment_width_multipier;
+        if depth >= self.num_segments {
+            return path_data.move_to(self.center + Position::new(-distance_from_center, 0.0, self.center.height)).line_to(self.center + Position::new(distance_from_center, 0.0, self.center.height));
+        }
+     
         let length = f64::from(self.num_segments - depth)
             * self.segment_width
             * self.segment_width_multipier;
